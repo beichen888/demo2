@@ -1,0 +1,116 @@
+import org.apache.tools.ant.filters.ReplaceTokens
+apply from: "dependencyDefinitions.gradle"
+
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        classpath("org.springframework.boot:spring-boot-gradle-plugin:1.5.7.RELEASE")
+        classpath 'se.transmode.gradle:gradle-docker:1.2'
+    }
+}
+
+apply plugin: 'java'
+apply plugin: 'idea'
+apply plugin: 'org.springframework.boot'
+apply plugin: 'docker'
+
+jar {
+    baseName = 'masterchinese'
+}
+
+repositories {
+    jcenter()
+}
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+dependencies {
+    compile("org.springframework.boot:spring-boot-starter-web")
+
+    compile ('org.springframework.boot:spring-boot-starter-log4j2')
+    // tag::actuator[]
+    compile("org.springframework.boot:spring-boot-starter-actuator")
+    // end::actuator[]
+    compile("org.springframework.boot:spring-boot-starter-data-jpa")
+
+    compile("org.springframework.boot:spring-boot-starter-mail")
+
+    compile("org.springframework.boot:spring-boot-starter-validation")
+
+    compile("org.springframework.boot:spring-boot-devtools")
+
+    compile 'com.github.shihyuho:jackson-dynamic-filter:1.0'
+
+    compile "com.github.rholder.fauxflake:fauxflake-core:1.1.0"
+
+    compile "jaxen:jaxen:1.1.6"
+
+    compile files('./src/main/libs/aliyun-java-sdk-core-3.2.3.jar')
+    compile files('./src/main/libs/aliyun-java-sdk-dysmsapi-1.0.0.jar')
+    compile files('./src/main/libs/alipay-sdk-java20171201160035.jar')
+    compileOnly('org.projectlombok:lombok')
+    compile(
+            libraries.'mysql',
+            libraries.'jwt',
+            libraries.'mail',
+            libraries.'commons-codec',
+            libraries.'commons-lang3',
+            libraries.'poi',
+            libraries.'poi-ooxml',
+            libraries.'httpclient',
+            //swagger2
+            libraries.'swagger',
+            libraries.'swagger-ui',
+            //zip4j
+            libraries.'zip4j',
+    )
+
+    testCompile("junit:junit")
+}
+
+configurations {
+    all*.exclude module : 'spring-boot-starter-logging'
+}
+
+def loadConfiguration() {
+    def environment = hasProperty('env') ? env : 'dev'
+    project.ext.envrionment = environment
+    println "Environment is set to $environment"
+
+    def configFile = file('environment.groovy')
+    def config = new ConfigSlurper("$environment").parse(configFile.toURL())
+    project.ext.config = config
+    config.toProperties()
+}
+
+
+processResources {
+    from(sourceSets.main.resources.srcDirs) {
+        filter(ReplaceTokens,
+                tokens: loadConfiguration()
+        )
+    }
+}
+
+springBoot {
+    executable = true
+}
+
+bootRun{
+    //jvmArgs "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005"
+}
+
+task buildDocker(type: Docker, dependsOn: build) {
+    push = false
+    applicationName = jar.baseName
+    dockerfile = file('src/main/docker/Dockerfile')
+    doFirst {
+        copy {
+            from jar
+            into stageDir
+        }
+    }
+}
